@@ -1,0 +1,59 @@
+{
+  "name": "@voightxyz/agents-mcp",
+  "version": "0.1.0-beta.1",
+  "description": "MCP server for Voight Agents: list, inspect, chat with and wake your deployed agents from any MCP client.",
+  "mcpName": "xyz.voight/agents",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "voight",
+    "ai-agents",
+    "agents",
+    "claude",
+    "cursor",
+    "codex"
+  ],
+  "homepage": "https://voight.xyz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voightxyz/agents-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/voightxyz/agents-mcp/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Voight (https://voight.xyz)",
+  "type": "module",
+  "bin": "./dist/cli.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsup && node scripts/notices.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run type-check && npm run test && npm run build",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "beta"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@types/node": "^26.6.1",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11",
+    "zod": "^4.6.5"
+  }
+}
