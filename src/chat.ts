@@ -33,13 +33,17 @@ export interface Turn {
   errorCode: string | null
   startedAt: number
   finishedAt: number | null
+  /** A tool result already carried the finished turn to the client. */
+  collected: boolean
 }
 
 type Message = { role: 'user' | 'assistant'; content: string }
 
 /** Same rolling window the web dashboard resends each turn. */
 const HISTORY_WINDOW = 16
-const KEEP_TURNS = 30
+const KEEP_TURNS = 200
+/** A finished turn nobody collected is kept at least this long. */
+const KEEP_UNCOLLECTED_MS = 30 * 60_000
 
 export class ChatTurns {
   private readonly turns = new Map<string, Turn>()
@@ -82,6 +86,7 @@ export class ChatTurns {
       errorCode: null,
       startedAt: this.now(),
       finishedAt: null,
+      collected: false,
     }
     this.turns.set(turn.ref, turn)
     this.prune()
@@ -135,6 +140,13 @@ export class ChatTurns {
         turn.status = 'error'
         turn.errorCode = 'AGENT_TIMEOUT'
         turn.error = 'The agent ran out of time on this turn before replying. It may still be finishing in the background: do not resend the same message right away.'
+      } else if (!turn.text.trim()) {
+        // A clean stream with no text at all (and usually 0 tokens) means the
+        // agent's own model call failed quietly. Reporting it as a finished
+        // reply would send an orchestrator on with nothing.
+        turn.status = 'error'
+        turn.errorCode = 'EMPTY_REPLY'
+        turn.error = 'The agent ended the turn without writing anything, which usually means its model call failed. Try once more; if it happens again, tell the user to check this agent in the dashboard.'
       } else {
         turn.status = 'done'
         if (turn.text.trim()) {
@@ -207,11 +219,24 @@ export class ChatTurns {
     if (buffer) handleLine(buffer)
   }
 
+  /** The finished turn reached the client: it may be forgotten when space is needed. */
+  markCollected(ref: string): void {
+    const t = this.turns.get(ref)
+    if (t && t.status !== 'running') t.collected = true
+  }
+
+  /**
+   * Oldest first, and never a running turn nor a reply nobody has read yet
+   * (a fan-out to ten agents must not evict the answers of the previous one).
+   */
   private prune(): void {
     if (this.turns.size <= KEEP_TURNS) return
+    const now = this.now()
     for (const [ref, t] of this.turns) {
       if (this.turns.size <= KEEP_TURNS) break
-      if (t.status !== 'running') this.turns.delete(ref)
+      if (t.status === 'running') continue
+      const stale = t.finishedAt !== null && now - t.finishedAt > KEEP_UNCOLLECTED_MS
+      if (t.collected || stale) this.turns.delete(ref)
     }
   }
 }

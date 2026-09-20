@@ -17,6 +17,8 @@ export class VoightApiError extends Error {
     readonly status: number,
     readonly code: string | null,
     message: string,
+    /** The rest of the error body: amounts, dates, the new price. */
+    readonly data: Record<string, unknown> = {},
   ) {
     super(message)
     this.name = 'VoightApiError'
@@ -32,7 +34,31 @@ export function explainError(err: unknown): string {
       case 'KEY_REVOKED':
         return `This API key was revoked. Create a new one with "Agents: operate" access at ${SETTINGS_URL}.`
       case 'KEY_SCOPE_MISSING':
-        return `${err.message} Keys are created at ${SETTINGS_URL}.`
+        return `${presetNames(err.message)} Keys are created at ${SETTINGS_URL}.`
+      case 'KEY_EXPIRED':
+        return `This API key expired ("Agents: full" keys last 90 days). Create a new one at ${SETTINGS_URL}.`
+      case 'KEY_EXPIRY_REQUIRED':
+        return `This action needs an "Agents: full" key created in the dashboard (they carry an expiry). Create one at ${SETTINGS_URL}.`
+      case 'KEY_REQUIRED':
+        return `This action only works with an "Agents: full" API key. Create one at ${SETTINGS_URL}.`
+      case 'INSUFFICIENT_FUNDS': {
+        const needed = typeof err.data.needed === 'number' ? ` $${err.data.needed.toFixed(2)} more is needed.` : ''
+        return `Not enough credits: this costs $${typeof err.data.priceUsd === 'number' ? err.data.priceUsd : 15}.${needed} Nothing was charged or created. Top up at ${AGENTS_URL}.`
+      }
+      case 'COST_CHANGED':
+        return `The price is higher than the confirmed one (${describeAmounts(err.data)}). Nothing was charged. Ask for a new quote and confirm it with the user.`
+      case 'COST_CONFIRMATION_REQUIRED':
+        return `A GPU deploy must repeat the quoted hourly price as confirm_hourly_usd (${describeAmounts(err.data)}). Nothing was charged. Call quote_agent_deploy first.`
+      case 'PROVISIONING_UNAVAILABLE':
+        return 'Voight cannot provision or tear down agents right now. Nothing was charged or changed. Try again later.'
+      case 'AGENT_PROVISIONING':
+        return 'This agent is still starting. Use wait_for_agent until it is ready, then delete it. Nothing was deleted.'
+      case 'CONFIRM_NAME_MISMATCH':
+        return "confirm_name must be the agent's exact name (see list_agents). Nothing was deleted."
+      case 'HANDLE_UNAVAILABLE':
+        return 'Could not allocate a handle for that name. Nothing was charged. Try a different name.'
+      case 'INTERNAL':
+        return 'Voight hit an internal error. It is unclear whether the action was applied: check list_agents before trying again.'
       case 'INSUFFICIENT_CREDITS':
         return `Not enough credits for this action. Top up at ${AGENTS_URL} and try again.`
       case 'AGENT_EXPIRED':
@@ -44,6 +70,9 @@ export function explainError(err: unknown): string {
       case 'AGENT_BUSY':
         return 'The agent is still working on its previous turn. Do not resend the message: wait and try again in a minute.'
     }
+    // Every other coded refusal already carries a sentence written for the caller
+    // (caps, GPU invite, renewal not due, key-deployed only, task approval...).
+    if (err.code && err.status >= 400 && err.status < 500 && err.message) return sentence(presetNames(err.message))
     if (err.status === 401) return `Voight rejected the API key (${err.message}). Check VOIGHT_API_KEY, or create a new key at ${SETTINGS_URL}.`
     if (err.status === 404) return 'Agent not found on this account. Use list_agents to see the ids you can use.'
     if (err.status === 429) return 'Rate limit reached for this API key. Wait before calling again; do not retry in a loop.'
@@ -57,6 +86,24 @@ export function explainError(err: unknown): string {
     return `Could not reach Voight: ${err.message}`
   }
   return 'Could not reach Voight.'
+}
+
+function sentence(text: string): string {
+  const t = text.trim()
+  const capped = t.charAt(0).toUpperCase() + t.slice(1)
+  return /[.!?]$/.test(capped) ? capped : `${capped}.`
+}
+
+/** The server names presets by id; people know them by their Settings label. */
+function presetNames(text: string): string {
+  return text.replace(/"?agents_full"?/g, '"Agents: full"').replace(/"?agents_operate"?/g, '"Agents: operate"')
+}
+
+function describeAmounts(data: Record<string, unknown>): string {
+  const parts: string[] = []
+  if (typeof data.costUsd === 'number') parts.push(`cost $${data.costUsd}`)
+  if (typeof data.hourlyUsd === 'number') parts.push(`GPU $${data.hourlyUsd} per hour`)
+  return parts.join(', ') || 'see a new quote'
 }
 
 export interface StreamResponse {
@@ -117,10 +164,11 @@ export class VoightApi {
     }
   }
 
-  private async json<T>(method: 'GET' | 'POST', path: string): Promise<T> {
+  private async json<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
     const res = await this.fetchImpl(`${this.config.endpoint}/v1${path}`, {
       method,
-      headers: this.headers(),
+      headers: body === undefined ? this.headers() : { ...this.headers(), 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(JSON_TIMEOUT_MS),
     })
     const text = await res.text()
@@ -159,6 +207,46 @@ export class VoightApi {
     return this.json<{ agent: ApiAgent; waking: boolean }>('POST', `/mcp/agents/${encodeURIComponent(id)}/wake`)
   }
 
+  // ── "Agents: full" surface: spends credits, plants tasks, deletes ────────
+  gpuMarkets() {
+    return this.json<{ hoursBilled: boolean; markets: ApiGpuMarket[] }>('GET', '/mcp/gpu-markets')
+  }
+  limits() {
+    return this.json<{ limits: Record<string, number> }>('GET', '/mcp/limits')
+  }
+  quoteDeploy(input: DeployInput) {
+    return this.json<{ quote: ApiDeployQuote }>('POST', '/mcp/agents/quote', input)
+  }
+  deploy(input: DeployInput & { confirmCostUsd: number; confirmHourlyUsd?: number; allowDuplicate?: boolean }) {
+    return this.json<{ agent: ApiAgent; replayed: boolean; chargedUsd: number }>('POST', '/mcp/agents', input)
+  }
+  quoteRenew(id: string) {
+    return this.json<{ quote: ApiRenewQuote }>('POST', `/mcp/agents/${encodeURIComponent(id)}/renew/quote`, {})
+  }
+  renew(id: string, confirmCostUsd: number) {
+    return this.json<{ agent: ApiAgent; chargedUsd: number; debounced: boolean }>('POST', `/mcp/agents/${encodeURIComponent(id)}/renew`, { confirmCostUsd })
+  }
+  deleteAgent(id: string, confirmName: string) {
+    return this.json<{ ok: true; already: boolean; refunded: 'credits' | 'free' | null; teardown: 'pending' | 'none' }>(
+      'DELETE',
+      `/mcp/agents/${encodeURIComponent(id)}`,
+      { confirmName },
+    )
+  }
+  createTask(agentId: string, body: TaskWrite & { title: string; prompt: string }) {
+    return this.json<{ task: ApiTask; pausedForApproval: boolean }>('POST', `/mcp/agents/${encodeURIComponent(agentId)}/tasks`, body)
+  }
+  updateTask(agentId: string, taskId: string, body: TaskWrite) {
+    return this.json<{ task: ApiTask; pausedForApproval: boolean }>(
+      'PATCH',
+      `/mcp/agents/${encodeURIComponent(agentId)}/tasks/${encodeURIComponent(taskId)}`,
+      body,
+    )
+  }
+  deleteTask(agentId: string, taskId: string) {
+    return this.json<{ ok: true }>('DELETE', `/mcp/agents/${encodeURIComponent(agentId)}/tasks/${encodeURIComponent(taskId)}`)
+  }
+
   /** Open a chat turn. Resolves once response headers arrive. */
   async chatStream(
     id: string,
@@ -177,7 +265,8 @@ export function toApiError(status: number, data: unknown, rawText = ''): VoightA
   const obj = data && typeof data === 'object' ? (data as Record<string, unknown>) : {}
   const code = typeof obj.code === 'string' ? obj.code : null
   const message = typeof obj.error === 'string' ? obj.error : rawText.slice(0, 200) || `HTTP ${status}`
-  return new VoightApiError(status, code, message)
+  const { error: _error, code: _code, ...rest } = obj
+  return new VoightApiError(status, code, message, rest)
 }
 
 /** The fields of the API's agent shape that this server reads. */
@@ -211,6 +300,59 @@ export interface ApiAgent {
   gpuStopped: boolean
   gpuMarketName: string | null
   runtimeModel: string | null
+  /** A deploy that has not started anything yet: deleting it now returns the $15. */
+  cancelRefundable?: boolean
+}
+
+export interface DeployInput {
+  name: string
+  role?: string
+  persona?: string
+  model?: string
+  framework?: 'hermes' | 'zeroclaw'
+  template?: 'general' | 'sales' | 'social' | 'prediction'
+  host?: 'voight' | 'nosana'
+  market?: '3060' | '3090' | '4090'
+  description?: string
+  tone?: 'Friendly' | 'Professional' | 'Direct' | 'Sharp'
+}
+
+export interface ApiGpuMarket {
+  market: string
+  name: string
+  hourlyUsd: number
+  availableGpus: number | null
+  queuedJobs: number | null
+}
+
+export interface ApiDeployQuote {
+  costUsd: number
+  periodDays: number
+  host: 'voight' | 'nosana'
+  gpu: { market: string; name: string; hourlyUsd: number; hoursBilled: boolean } | null
+  balanceUsd: number
+  sufficientBalance: boolean
+  cancelRefundable: boolean
+}
+
+export interface ApiRenewQuote {
+  costUsd: number
+  periodDays: number
+  due: boolean
+  renewableFrom: string | null
+  expiresAt: string | null
+  balanceUsd: number
+  sufficientBalance: boolean
+}
+
+export interface TaskWrite {
+  title?: string
+  prompt?: string
+  enabled?: boolean
+  scheduleKind?: 'DAILY' | 'WEEKLY' | null
+  scheduleHour?: number | null
+  scheduleMinute?: number
+  scheduleWeekday?: number | null
 }
 
 export interface ApiAgentUsage {

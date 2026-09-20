@@ -46,13 +46,13 @@ export function resolveApiKey(raw: string | undefined): Pick<Config, 'apiKey' | 
   if (!key) {
     return {
       apiKey: null,
-      apiKeyProblem: `VOIGHT_API_KEY is not set. Create a key with "Agents: operate" access at ${SETTINGS_URL} and pass it to this server as the VOIGHT_API_KEY environment variable.`,
+      apiKeyProblem: `VOIGHT_API_KEY is not set. Create a key at ${SETTINGS_URL} ("Agents: operate" to use your agents, "Agents: full" to also deploy, renew, schedule and delete) and pass it to this server as the VOIGHT_API_KEY environment variable.`,
     }
   }
   if (!key.startsWith('vk_')) {
     return {
       apiKey: null,
-      apiKeyProblem: `VOIGHT_API_KEY does not look like a Voight key (it should start with "vk_"). Create one with "Agents: operate" access at ${SETTINGS_URL}.`,
+      apiKeyProblem: `VOIGHT_API_KEY does not look like a Voight key (it should start with "vk_"). Create an "Agents: operate" or "Agents: full" key at ${SETTINGS_URL}.`,
     }
   }
   return { apiKey: key, apiKeyProblem: null }

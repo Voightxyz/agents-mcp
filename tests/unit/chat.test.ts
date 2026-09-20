@@ -105,4 +105,38 @@ describe('ChatTurns', () => {
     expect(turn).toMatchObject({ status: 'error', text: 'half an ans', errorCode: 'NETWORK' })
     expect(turn.error).toMatch(/dropped mid-reply/)
   })
+
+  it('an empty stream is an error, not a finished reply, and leaves no history', async () => {
+    const empty = 'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n' +
+      'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}\n\n' + sse.done()
+    const { turns, requests } = setup([{ status: 200, body: [empty] }, { status: 200, body: [sse.delta('ok') + sse.done()] }])
+    const turn = turns.start('ag_1', 'hello')
+    await turns.wait(turn.ref, 1000)
+    expect(turn).toMatchObject({ status: 'error', errorCode: 'EMPTY_REPLY', text: '' })
+    expect(turn.error).toMatch(/model call failed/)
+    const next = turns.start('ag_1', 'hello again')
+    await turns.wait(next.ref, 1000)
+    expect(requests[1]!.body.messages).toEqual([{ role: 'user', content: 'hello again' }])
+  })
+
+  it('never evicts a reply nobody has collected; collected ones make room', async () => {
+    const N = 201
+    const { turns } = setup(Array.from({ length: N + 1 }, (_, i) => ({ status: 200, body: [sse.delta(`reply ${i}`) + sse.done()] })))
+    const refs: string[] = []
+    for (let i = 0; i < N; i++) {
+      const t = turns.start(`ag_${i}`, 'hi')
+      await turns.wait(t.ref, 1000)
+      refs.push(t.ref)
+    }
+    expect(turns.get(refs[0]!)?.text).toBe('reply 0') // over the limit, but unread: kept
+
+    turns.markCollected(refs[0]!)
+    turns.markCollected(refs[1]!)
+    const extra = turns.start('ag_extra', 'hi')
+    await turns.wait(extra.ref, 1000)
+    expect(turns.get(refs[0]!)).toBeUndefined()
+    expect(turns.get(refs[1]!)).toBeUndefined()
+    expect(turns.get(refs[2]!)?.text).toBe('reply 2')
+  })
 })
+

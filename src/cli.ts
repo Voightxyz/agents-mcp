@@ -15,12 +15,13 @@ Usage
   npx -y @voightxyz/agents-mcp [--read-only]
 
 Environment
-  VOIGHT_API_KEY   Required. A key with "Agents: operate" access.
+  VOIGHT_API_KEY   Required. "Agents: operate" to use your agents, or
+                   "Agents: full" to also deploy, renew, schedule and delete.
                    Create it at ${SETTINGS_URL}
   VOIGHT_ENDPOINT  Optional. Defaults to https://api.voight.xyz
 
 Flags
-  --read-only      Only expose the read tools (no chat, no wake).
+  --read-only      Only expose tools that read (no chat, no deploy, no delete).
   --version        Print the version.
   --help           Print this help.
 

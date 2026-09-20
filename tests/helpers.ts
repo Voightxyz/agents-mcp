@@ -52,12 +52,12 @@ type Route = { status?: number; body: unknown }
 
 /** A fetch that answers from a `METHOD /path` table and records every call. */
 export function fakeFetch(routes: Record<string, Route>) {
-  const calls: { method: string; path: string; auth: string | null }[] = []
+  const calls: { method: string; path: string; auth: string | null; body?: any }[] = []
   const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input))
     const method = init?.method ?? 'GET'
     const headers = new Headers(init?.headers)
-    calls.push({ method, path: url.pathname, auth: headers.get('authorization') })
+    calls.push({ method, path: url.pathname, auth: headers.get('authorization'), body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined })
     const route = routes[`${method} ${url.pathname}`]
     if (!route) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
     return new Response(JSON.stringify(route.body), { status: route.status ?? 200 })

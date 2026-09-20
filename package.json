@@ -1,7 +1,7 @@
 {
   "name": "@voightxyz/agents-mcp",
-  "version": "0.1.0-beta.1",
-  "description": "MCP server for Voight Agents: list, inspect, chat with and wake your deployed agents from any MCP client.",
+  "version": "0.2.0-beta.1",
+  "description": "MCP server for Voight Agents: deploy, operate and orchestrate your AI agents from any MCP client.",
   "mcpName": "xyz.voight/agents",
   "keywords": [
     "mcp",

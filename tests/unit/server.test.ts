@@ -47,12 +47,21 @@ const ROUTES = {
 }
 
 describe('tool listing', () => {
-  it('exposes the eight tools with titles, annotations and output schemas', async () => {
+  it('exposes the twenty tools with titles, annotations and output schemas', async () => {
     const client = await connect(CONFIG)
     const { tools } = await client.listTools()
     expect(tools.map((t) => t.name)).toEqual([
-      'list_agents', 'get_agent', 'get_credits', 'get_agent_usage', 'list_tasks', 'chat_with_agent', 'get_reply', 'wake_agent',
+      'list_agents', 'get_agent', 'get_credits', 'get_agent_usage', 'list_tasks',
+      'list_gpu_markets', 'quote_agent_deploy', 'quote_agent_renewal', 'wait_for_agent',
+      'deploy_agent', 'renew_agent', 'delete_agent', 'create_task', 'update_task', 'delete_task',
+      'chat_with_agent', 'get_reply', 'wake_agent', 'message_agents', 'get_replies',
     ])
+    for (const t of tools) expect(t.name.length, t.name).toBeLessThanOrEqual(64)
+    // Reads and writes are separate tools, and only delete tools are marked destructive.
+    const hint = (n: string) => tools.find((t) => t.name === n)!.annotations!
+    for (const n of ['list_gpu_markets', 'quote_agent_deploy', 'quote_agent_renewal', 'wait_for_agent', 'get_replies']) expect(hint(n).readOnlyHint, n).toBe(true)
+    for (const n of ['deploy_agent', 'renew_agent', 'create_task', 'update_task', 'message_agents']) expect(hint(n).readOnlyHint, n).toBe(false)
+    expect(tools.filter((t) => t.annotations?.destructiveHint).map((t) => t.name)).toEqual(['delete_agent', 'delete_task'])
     for (const t of tools) {
       expect(t.title, t.name).toBeTruthy()
       expect(t.outputSchema, t.name).toBeTruthy()
@@ -65,7 +74,10 @@ describe('tool listing', () => {
   it('--read-only removes every tool that can act or spend', async () => {
     const client = await connect({ ...CONFIG, readOnly: true })
     const { tools } = await client.listTools()
-    expect(tools.map((t) => t.name)).toEqual(['list_agents', 'get_agent', 'get_credits', 'get_agent_usage', 'list_tasks'])
+    expect(tools.map((t) => t.name)).toEqual([
+      'list_agents', 'get_agent', 'get_credits', 'get_agent_usage', 'list_tasks',
+      'list_gpu_markets', 'quote_agent_deploy', 'quote_agent_renewal', 'wait_for_agent',
+    ])
   })
 })
 
@@ -87,7 +99,11 @@ describe('read tools', () => {
   it('get_agent, get_credits and both usage scopes', async () => {
     const client = await connect(CONFIG, { fetch: fakeFetch(ROUTES).impl })
     const agent = await client.callTool({ name: 'get_agent', arguments: { agent_id: 'ag_cloud' } })
-    expect(agent.structuredContent).toMatchObject({ agent: { id: 'ag_cloud', persona: 'You research things.', telegramBot: '@research_bot' } })
+    expect(agent.structuredContent).toMatchObject({ agent: { id: 'ag_cloud', telegramBot: '@research_bot' } })
+    // The persona can be written through deploy_agent, so it comes back fenced like any stored text.
+    const persona = (agent.structuredContent as { agent: { persona: string } }).agent.persona
+    expect(persona).toMatch(/^<<<VOIGHT_UNTRUSTED_[0-9a-f]{12} /)
+    expect(persona).toContain('You research things.')
     const credits = await client.callTool({ name: 'get_credits', arguments: {} })
     expect(credits.structuredContent).toEqual({ balanceUsd: 12.5, plan: 'FREE', deployPriceUsd: 15, topUpUrl: 'https://agent.voight.xyz' })
     const account = await client.callTool({ name: 'get_agent_usage', arguments: {} })
@@ -125,7 +141,7 @@ describe('failures are one clear sentence', () => {
     })
     const scope = await client.callTool({ name: 'list_agents', arguments: {} })
     expect(scope.isError).toBe(true)
-    expect(text(scope)).toMatch(/agents_operate/)
+    expect(text(scope)).toMatch(/"Agents: operate"/)
     expect(text(scope)).toMatch(/voight\.xyz\/dashboard\/settings/)
     const missing = await client.callTool({ name: 'get_agent', arguments: { agent_id: 'nope' } })
     expect(text(missing)).toMatch(/Use list_agents/)

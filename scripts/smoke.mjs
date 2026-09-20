@@ -1,7 +1,7 @@
 // Publish-time check of the BUILT binary over real stdio:
 //   npm run build && npm run smoke
 // Without VOIGHT_API_KEY it lists the tools and checks the missing-key error.
-// With a key it also reads the account (no chat, no wake: nothing is spent).
+// With a key it also reads the account (no chat, no wake, no deploy: nothing is spent).
 import { Client } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 
