@@ -142,7 +142,7 @@ describe('failures are one clear sentence', () => {
     const scope = await client.callTool({ name: 'list_agents', arguments: {} })
     expect(scope.isError).toBe(true)
     expect(text(scope)).toMatch(/"Agents: operate"/)
-    expect(text(scope)).toMatch(/voight\.xyz\/dashboard\/settings/)
+    expect(text(scope)).toMatch(/agent\.voight\.xyz/)
     const missing = await client.callTool({ name: 'get_agent', arguments: { agent_id: 'nope' } })
     expect(text(missing)).toMatch(/Use list_agents/)
     const limited = await client.callTool({ name: 'get_credits', arguments: {} })
