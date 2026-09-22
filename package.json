@@ -1,6 +1,6 @@
 {
   "name": "@voightxyz/agents-mcp",
-  "version": "0.2.0-beta.1",
+  "version": "0.2.0",
   "description": "MCP server for Voight Agents: deploy, operate and orchestrate your AI agents from any MCP client.",
   "mcpName": "xyz.voight/agents",
   "keywords": [
@@ -44,8 +44,7 @@
     "node": ">=20"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "beta"
+    "access": "public"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.0.0",

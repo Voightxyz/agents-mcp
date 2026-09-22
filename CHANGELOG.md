@@ -3,7 +3,7 @@
 All notable changes to `@voightxyz/agents-mcp` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.2.0-beta.1] - 2026-09-20
+## [0.2.0] - 2026-09-22
 
 Deploy, manage and orchestrate: the server now covers the whole life of an agent. The new spending and deleting tools need an **Agents: full** key; everything in 0.1 keeps working with an **Agents: operate** key.
 
