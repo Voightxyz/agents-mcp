@@ -27,7 +27,7 @@ Deploy agents on Voight cloud or Nosana GPUs, talk to one or to ten at once, sch
 
 ## Quick start
 
-**1. Create an API key.** Open [voight.xyz/dashboard/settings](https://voight.xyz/dashboard/settings), create a key and choose its access level. The key is shown once.
+**1. Create an API key.** Open [agent.voight.xyz](https://agent.voight.xyz), open the account menu and choose **MCP / API**. Pick the access level and generate the key. It is shown once.
 
 | Access | What it can do | Expires |
 | --- | --- | --- |

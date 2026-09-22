@@ -4,7 +4,8 @@
  */
 
 export const DEFAULT_ENDPOINT = 'https://api.voight.xyz'
-export const SETTINGS_URL = 'https://voight.xyz/dashboard/settings'
+/** Where MCP keys are created: the Voight Agents app, account menu, "MCP / API". */
+export const SETTINGS_URL = 'https://agent.voight.xyz (account menu, MCP / API)'
 export const AGENTS_URL = 'https://agent.voight.xyz'
 
 export interface Config {
