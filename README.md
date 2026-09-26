@@ -296,3 +296,7 @@ Inspect it with the MCP Inspector: `npx @modelcontextprotocol/inspector node dis
 ## License
 
 Apache 2.0 © Voight. See [LICENSE](./LICENSE).
+
+---
+
+Voight is the observability and debugging infrastructure for autonomous systems, built by Galaxyhub Labs Inc. Voight Agents is its hosted-agents product. Company, team and traction: https://voight.xyz/company
